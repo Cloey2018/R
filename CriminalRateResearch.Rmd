@@ -1,0 +1,114 @@
+---
+title: "CriminalRateResearch"
+author: "Ziwei Li"
+date: "19/12/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loda data in R}
+Criminalrecord <- read.csv("DV_NSW_by_LGA.csv")
+NSWRegion <- read.csv("NSW_LGA.csv")
+```
+
+```{r criminal rate in 2011}
+# The number of criminal records in 2011
+Criminalrecord$crecord.11 <- Criminalrecord$Jan.11 + Criminalrecord$Feb.11 + Criminalrecord$May.11 +
+  Criminalrecord$Apr.11 + Criminalrecord$Mar.11 + Criminalrecord$Jun.11 + Criminalrecord$Jul.11 + 
+  Criminalrecord$Aug.11 + Criminalrecord$Sep.11 + Criminalrecord$Oct.11 + Criminalrecord$Nov.11 + 
+  Criminalrecord$Dec.11
+# New dataframe only contains crecord.11 and label ("LGA")
+Criminalrecord.1 <- Criminalrecord[, c("label","crecord.11")]
+head(Criminalrecord.1)
+
+# Merge the new dataframe with NSWRegion and create the independent variable "cr" (criminalrate)
+# Criminalrate = criminalrecord / population
+NSWRegion.1 <- merge(NSWRegion, Criminalrecord.1, by = "label")
+head(NSWRegion.1)
+# Multiply cr with 10000, since average cr is pretty low
+NSWRegion.1$cr <- (NSWRegion.1$crecord.11 / (NSWRegion.1$B3)) * 100000
+NSWRegion.1$cr
+
+# Removing the useless colomuns of the new dataset
+NSWRegion.2 <- NSWRegion.1[!names(NSWRegion.1) %in%
+                           c("region_id","label","year","B1","B2","B3","crecord.11")]
+NSWRegion.2 <- na.omit(NSWRegion.2)
+head(NSWRegion.2)
+dim(NSWRegion.2)
+```
+
+```{r feature selection}
+# load libraries
+library(rpart)
+library(tidyr)
+library(ggplot2)
+suppressPackageStartupMessages(library(Metrics))
+suppressPackageStartupMessages(library(caret))
+
+# split data into train and test
+set.seed(123)
+inTrain <- createDataPartition(NSWRegion.2$cr, p = .7)[[1]]
+CRTrain <- NSWRegion.2[ inTrain,]
+CRTest  <- NSWRegion.2[-inTrain,]
+
+# No. of cols in data frame
+c <- ncol(CRTrain)
+# Initializing the vector which contain the p-values of all variables
+pvalues <- numeric(c)
+# Getting the p-values
+for(i in 1:c)
+{
+  fit <- lm(CRTrain$cr ~ CRTrain[,i])
+  summ <- summary(fit)
+  pvalues[i] <- summ$coefficients[2]
+}
+head(summ)
+# ord stores the colomun number in order of decreasing p-values
+ord <- order(pvalues)
+# Getting the solumn numbers for thr top 50 features
+ord <- ord[1:51]
+X50 <- CRTrain[,ord]
+names(X50)
+```
+
+
+
+```{r PCA}
+library("FactoMineR")
+library("factoextra")
+
+cr.pca <- PCA(X50[1:51], graph = FALSE)
+cr.val <- get_eigenvalue(cr.pca)
+cr.val
+fviz_eig(cr.pca, addlabels = TRUE, ylim = c(0,25))
+```
+
+```{r Choose the first 18 features from X50}
+NewX <- X50[1:20]
+names <- names(NewX)
+NewNSW <- na.omit(NSWRegion.2[,names])
+
+# rescale data
+preObj <- preProcess(NewNSW[,-1], method=c("center", "scale"))
+NewNSW <- predict(preObj, NewNSW[,-1])
+NewNSW$cr <- NSWRegion.2$cr
+```
+
+```{r Fit the data into linear model}
+library(arm)
+model <- lm(cr ~. , data = NewNSW)
+
+display(model)
+```
+
+```{r The factors that affect the domestic violence rate}
+crlabel <- read.csv("labels.csv")
+crlabel <- crlabel[c(116,1570,1825,1190,7716,7083,7063,1802,7013,7293,6712,1697,7033,2240,6963,1827,6793,7213),]
+crlabel
+```
+
+
+
