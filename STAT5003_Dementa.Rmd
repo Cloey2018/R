@@ -1,6 +1,6 @@
 ---
-title: "GroupProject"
-author: "Ziwei Li(480312695) Songfen Fen(480164865) Dhanu Vardhan Singh Jhala(480563862)"
+title: "Dementia Analysis"
+author: "XXX"
 date: "21/05/2019"
 output: html_document
 ---
