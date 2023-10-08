@@ -1,0 +1,158 @@
+---
+title: "Final"
+author: '480312695'
+date: "13/06/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load library}
+library(mlbench)
+library(ggplot2)
+library(e1071)
+library(caret)
+library(glmnet)
+```
+
+
+# Question 1 [Regression and density estimation]
+
+```{r 1a}
+data("BostonHousing")
+
+ggplot(BostonHousing, aes(lstat, medv)) + geom_point() + ggtitle("medv vs lstat")
+```
+
+```{r 1b density plot}
+hist(na.omit(BostonHousing$lstat),breaks=30, freq = FALSE, xlim = c(0,40), main = "Distribution of lstat", xlab = "lstat") 
+```
+
+```{r 1c Gaussian density estimate , warning=FALSE}
+bw <- bw.bcv(na.omit(BostonHousing$lstat), lower = 0.01, upper = 2) 
+Boston.d <- density(na.omit(BostonHousing$lstat), bw = bw, kernel = "gaussian")
+
+# overlap the density on histogram
+hist(na.omit(BostonHousing$lstat),breaks=30, freq = FALSE, xlim = c(0,40), main = "Gaussian density estimate of lstat", xlab = "lstat") 
+lines(Boston.d$x, Boston.d$y, col = "red")
+```
+Got sth wrong when knitting to html, so I have to comment the command but it can be shown in the RMD file. The error is so stupid!!!!
+
+
+```{r 1d linear regression}
+head(BostonHousing)
+# linear regression only on lstat
+B.lm1 <- lm(data = BostonHousing, medv ~ lstat)
+summary(B.lm1)
+
+# multivariate linear regression
+B.lm2 <- lm(data = BostonHousing, medv ~ .)
+summary(B.lm2)
+```
+In this section, I choose R-squared to evaluate the models. In general, the more R-suared close to 1, the better the model is. As we can see from the summary, simple linear model has a 0.5432  R-suared value while mulitvariate linear model has a higher value with 0.7338. That indicates, the second model is better than the first one.
+
+```{r 1e bootstrapping}
+
+```
+* i The bootstrap is a flexible and powerful statistical tool that can be used to quantify the uncertainty associated with a given estimator or statistical learning method.
+
+
+
+# Question 2 [Clustering and dimension reduction]
+
+```{r 2a non-species matrix}
+data("iris")
+dim(iris)
+
+# subset the data without species and transfer into matrix
+iris.nosp <- as.matrix(iris[,-5])
+head(iris.nosp, 5)
+```
+
+```{r 2b hierarchical clustering}
+iris.dist <- dist(iris[,-5], method="euclidean")
+iris.h <- hclust(iris.dist)
+plot(iris.h, cex = 0.35)
+```
+
+```{r 2c k-means clustering}
+set.seed(1)
+iris.kc <- kmeans(iris.dist, centers = 3)
+```
+Apply a set of K values to k-means cluster and plot their withniss and betweenss against K. Optimal k would make the clusters more compaxct and large distance between clusters, which means a relatively lower withniss and higher betweenss.
+
+```{r 2d PCA}
+iris.pca <- prcomp(iris[,1:4])
+iris.pca.df <- data.frame(PC1 = iris.pca$x[,1], PC2 = iris.pca$x[,2], labels = as.factor(iris$Species))
+ggplot(iris.pca.df, aes(PC1, PC2, col = labels)) + geom_point()
+```
+
+```{r 2e K-means on pc1 and pc2}
+set.seed(1)
+
+iris.kc1 <- kmeans(iris.pca.df[,-3], centers = 3)
+iris.kmeans <- data.frame(PC1 = iris.pca$x[,1], PC2 = iris.pca$x[,2], labels = as.factor(iris.kc1$cluster))
+ggplot(iris.pca.df, aes(PC1, PC2, col = labels)) + geom_point()
+```
+
+# Question 3
+
+```{r 3a check the class}
+data("Ionosphere")
+sum(Ionosphere$Class == "good")
+sum(Ionosphere$Class == "bad")
+```
+
+```{r 3b logistic regression}
+dim(Ionosphere)
+Ionosphere.clean <- na.omit(Ionosphere[,3:35])
+Iono.gl <- glm(Class ~., data = Ionosphere.clean, family = binomial(link = 'logit'))
+summary(Iono.gl)
+```
+
+```{r 3c overall accuracy, warning=FALSE}
+preds <- ifelse(Iono.gl$fitted.values > 0.5, "good", "bad")
+# TP,TN,FP,FN
+Iono.TP <- sum((Ionosphere.clean$Class == preds)[Ionosphere.clean$Class == "good"])
+Iono.TN <- sum((Ionosphere.clean$Class == preds)[Ionosphere.clean$Class == "bad"])
+Iono.FP <- sum((Ionosphere.clean$Class != preds)[Ionosphere.clean$Class == "good"])
+Iono.FN <- sum((Ionosphere.clean$Class != preds)[Ionosphere.clean$Class == "bad"])
+# accuracy
+Iono.overall <- (Iono.TP+Iono.TN)/(Iono.TP+Iono.TN+Iono.FP+Iono.FN)*100
+Iono.overall
+```
+
+```{r 3d 5-fold CV, warning=FALSE}
+set.seed(1)
+fold1 <- createFolds(Ionosphere.clean$Class, k=5)
+Iono.acc <- c()
+glm.TP <- glm.TN <- glm.FP <- glm.FN <- c()
+for(i in 1:length(fold1)){
+  glm.model <- glm(Class~., data=Ionosphere.clean[-fold1[[i]],], family = binomial(link = 'logit'))
+  preds <- ifelse(glm.model$fitted.values > 0.5, "good", "bad")
+  
+  glm.TP <- c(glm.TP, sum((Ionosphere.clean$Class[fold1[[i]]] == preds)[preds == "good"]))
+  glm.TN <- c(glm.TN, sum((Ionosphere.clean$Class[fold1[[i]]] == preds)[preds == "bad"]))
+  glm.FP <- c(glm.FP, sum((Ionosphere.clean$Class[fold1[[i]]] != preds)[preds == "good"]))
+  glm.FN <- c(glm.FN, sum((Ionosphere.clean$Class[fold1[[i]]] != preds)[preds == "bad"]))
+}
+Iono.acc <- (glm.TN+glm.TP)/(glm.TN+glm.TP+glm.FP+glm.FN)*100
+acc.ave <- mean(Iono.acc)
+```
+The overall accuracy is 90.88% and average accuracy is 55.98%. Corss-validation provides more accurate results for the model have seen all the data and test the accuracy on unseen data. 
+
+```{r 3e lasso}
+set.seed(1)
+inTrain <- createDataPartition(Ionosphere.clean$Class, p = 0.6)[[1]]
+dataTrain <- Ionosphere.clean[inTrain,]
+dataTest <- Ionosphere.clean[-inTrain,]
+
+x <- model.matrix(Class ~., Ionosphere.clean[,-1])[,-1]
+y <- Ionosphere.clean$Class
+
+
+```
+
+lasso procedure:
